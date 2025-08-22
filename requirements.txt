@@ -1,0 +1,7 @@
+Flask==3.0.3
+SQLAlchemy==2.0.32
+psycopg2-binary==2.9.10
+openai==1.51.2
+python-dotenv==1.0.1
+numpy==2.1.1
+gunicorn==21.2.0
