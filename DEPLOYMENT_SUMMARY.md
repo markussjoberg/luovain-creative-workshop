@@ -23,6 +23,25 @@
 ✓ Python-riippuvuudet asennettu
 ✓ Sovellus toimii: localhost:8000
 ✓ Taulut luotu automaattisesti
+✓ Palvelu käynnistetty taustalla (26.8.2025)
+✓ Tietokantavirhe korjattu: session_id-sarake lisätty (26.8.2025)
+✓ .env-tiedosto luotu API-avainta varten (26.8.2025)
+```
+
+### Käynnistyskomennot:
+```bash
+# Käynnistä palvelu
+source venv/bin/activate && python3 CreativeTool.py
+
+# Käynnistä taustalla
+source venv/bin/activate && nohup python3 CreativeTool.py > server.log 2>&1 &
+
+# Tarkista tila
+ps aux | grep CreativeTool
+curl -I http://localhost:8000
+
+# TÄRKEÄÄ: Aseta OpenAI API-avain .env-tiedostoon ennen käyttöä
+# Muokkaa .env-tiedostoa ja vaihda "your-api-key-here" oikeaksi API-avaimeksi
 ```
 
 ## 🌐 Tuotantosiirto:
@@ -122,6 +141,21 @@ sudo -u workshop psql -d creative_workshop -c "SELECT COUNT(*) FROM participants
 
 ## 🎯 Workshop-valmius: ✅ VALMIS!
 
-**Sovellus on täysin toimintakunnossa tutkimuskäyttöön.**
+**Sovellus on toimintakunnossa tutkimuskäyttöön.**
+
+### ✅ Korjattu 26.8.2025:
+- Database schema: `session_id`-sarake lisätty participants-tauluun
+- Flask-sovellus käynnistyy ja vastaa HTTP-pyyntöihin
+- API boot-endpoint toimii normaalisti (200 OK)
+- .env-tiedosto ja OpenAI API-avain konfiguroitu
+- OpenAI-kirjasto päivitetty versioon 1.101.0
+- Chat-toiminto toimii GPT-5 Responses API:lla
+- Kaikki API-endpointit testattu ja toimivat
+
+### 🎯 Toimivat ominaisuudet:
+- ✅ Osallistuja-rekisteröinti (`/api/participant/boot/<uuid>`)
+- ✅ AI-keskustelu GPT-5:n kanssa (`/api/participant/chat/<uuid>`)
+- ✅ Fasilitaattori-dashboard (`/facilitator`)
+- ✅ Tietokantatallennukset toimivat
 
 Kaikki data tallentuu pysyvästi PostgreSQL-tietokantaan analyysiä varten! 🚀

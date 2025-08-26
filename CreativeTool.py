@@ -58,14 +58,15 @@ OPENAI_MODEL = os.environ.get("CSW_MODEL", "gpt-5")
 EMBED_MODEL = os.environ.get("CSW_EMBED_MODEL", "text-embedding-3-small")
 SYSTEM_INSTRUCTIONS_PARTICIPANT = """
 You are an expert facilitator helping a creative professional reflect on their AI usage
-and upskilling needs. Work in short, clear messages. Ask one question at a time.
+and upskilling needs. Work in short, clear messages, but be kind. Ask one question at a time.
 Language: mirror the user's language; if unclear, default to English.
 
-IMPORTANT: Keep the conversation focused and conclude after 5-7 exchanges total.
+IMPORTANT: Keep the conversation focused and conclude after 6-8 exchanges total.
 
-Before anything else, ask the two standard questions exactly:
-1) "Your name?"
-2) "What kind of creative work do you do (profession or hobby)?"
+Before anything else, ask the two standard questions :
+"Hi ther! What is your name?"
+And then the sedcond
+"What kind of creative work do you do (profession or hobby)?"
 
 After collecting both, continue with a brief, focused dialogue (3-5 more exchanges) to map:
 - Creative tasks they already use AI for (concrete examples)
@@ -77,17 +78,21 @@ followed by a compact bullet summary of their needs, then: "You're ready to conn
 """
 
 SYSTEM_INSTRUCTIONS_GROUP_CHAIR = """
-You are the chair/guide of a fast concepting session (fail fast / lean prototyping).
-Keep momentum high, keep messages short, time-box decisions, and propose concrete drafts.
+You are a creative sparring partner guiding a fast concepting session (fail fast / lean prototyping).
+Be encouraging, playful, and inspiring – keep energy high and momentum fast.
+Use short, motivating messages, propose concrete drafts, and celebrate progress.
+ 
 Workflow:
-1) In English, ask: "Which concept do you want to create now (e.g., short film script, song lyrics, software idea, event concept, game plot)?"
-2) Then run a 4-step loop, each step a single short message with an actionable ask:
-   a) Frame: restate target, propose a minimal scope and success criteria; ask for yes/no.
-   b) Draft: generate a scrappy first version (title + 5–10 bullets or ~300 words for script beat outline or 24-bar lyric). Ask for 1–2 tweaks.
-   c) Iterate: apply tweaks, resolve open decisions by proposing 2 options to pick from.
-   d) Finalise: produce a clean final artifact in the proper format; add a 5-bullet test plan.
-3) End with a 5-bullet reflection: what worked, what to try next, and a single concrete next step.
-Stay directive. If the group stalls, make a decision and move on.
+ 
+Start by asking: “Based on your shared interests and possible synergies – what could you imagine creating together?”
+Guide the group through:
+Ask only one playful question at a time, and always build on their answers.
+Keep the vibe collaborative, energetic, and imaginative until the concept feels ready.
+ 
+Ideation – spark many raw, fun ideas
+Choosing – help them quickly pick one
+Refining – add purpose, audience, key features
+Finalising – shape into a clear, exciting concept
 """
 
 SYSTEM_INSTRUCTIONS_SUMMARY_TO_TOPICS = """
@@ -200,10 +205,13 @@ except Exception as e:
     print(f"Error creating tables: {e}")
     print("Please ensure PostgreSQL is running and database exists!")
 
-# --- OpenAI client
-client = OpenAI()
+# --- OpenAI client (initialized in functions to avoid startup issues)
 
 def llm_chat(messages: List[Dict[str, str]], model: str = OPENAI_MODEL, temperature: float = 0.4, max_tokens: int = 700) -> str:
+    from openai import OpenAI
+    import os
+    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    
     if model.startswith("gpt-5"):
         # GPT-5 requires Responses API
         # Convert messages to a single prompt for Responses API
@@ -237,6 +245,9 @@ def llm_chat(messages: List[Dict[str, str]], model: str = OPENAI_MODEL, temperat
         return resp.choices[0].message.content
 
 def embed(texts: List[str], model: str = EMBED_MODEL) -> List[List[float]]:
+    from openai import OpenAI
+    import os
+    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     e = client.embeddings.create(model=model, input=texts)
     return [d.embedding for d in e.data]
 
@@ -1034,7 +1045,7 @@ def participant_boot(puuid):
     db = SessionLocal()
     p = db.query(Participant).filter_by(uuid=puuid).first()
     if not p:
-        p = Participant(uuid=puuid)
+        p = Participant(uuid=puuid, session_id=CURRENT_SESSION_ID)
         db.add(p); db.commit()
     # system
     db.add(Chat(participant_id=p.id, role="system", content=SYSTEM_INSTRUCTIONS_PARTICIPANT, stage="onboarding"))
@@ -1379,8 +1390,8 @@ def form_groups():
                     })
 
         # Persist groups
-        # Clear old
-        db.query(GroupMember).delete(); db.query(Group).delete(); db.commit()
+        # Clear old (in correct order due to foreign keys)
+        db.query(GroupChat).delete(); db.query(GroupMember).delete(); db.query(Group).delete(); db.commit()
         for i, g in enumerate(groups):
             group_number = i + 1
             row = Group(name=g["name"], group_number=group_number, rationale=g["rationale"])

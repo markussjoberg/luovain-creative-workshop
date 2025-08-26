@@ -48,4 +48,17 @@ Thumbs.db
 
 # Test artifacts
 generate_test_participants.py
-EOF < /dev/null
+
+# Backup files
+csw_backup_*.db
+*.bak
+*~
+
+# Flask logs
+server.log
+debug.log
+
+# Production files
+nginx.conf
+gunicorn.conf
+systemd/
