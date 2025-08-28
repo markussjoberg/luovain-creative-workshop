@@ -30,10 +30,11 @@ import os
 import json
 import time
 import uuid
+from datetime import datetime
 from dataclasses import dataclass
 from typing import List, Optional, Dict, Any
 
-from flask import Flask, request, jsonify, render_template_string, redirect
+from flask import Flask, request, jsonify, render_template_string, redirect, make_response
 from sqlalchemy import create_engine, Column, Integer, String, Text, Float, DateTime, ForeignKey, func, text
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship  
 from sqlalchemy.pool import StaticPool
@@ -78,21 +79,22 @@ followed by a compact bullet summary of their needs, then: "You're ready to conn
 """
 
 SYSTEM_INSTRUCTIONS_GROUP_CHAIR = """
-You are a creative sparring partner guiding a fast concepting session (fail fast / lean prototyping).
-Be encouraging, playful, and inspiring – keep energy high and momentum fast.
-Use short, motivating messages, propose concrete drafts, and celebrate progress.
+You are a creative sparring partner and professional guiding a fast concepting session (fail fast / lean prototyping).
+Be encouraging and inspiring, but still professional.
+Use short, motivating messages, propose concrete drafts, and help with the progress.
  
 Workflow:
  
 Start by asking: “Based on your shared interests and possible synergies – what could you imagine creating together?”
 Guide the group through:
-Ask only one playful question at a time, and always build on their answers.
+Ask only one question at a time, and always build on their answers.
 Keep the vibe collaborative, energetic, and imaginative until the concept feels ready.
+As you know the group members, you can use their strengths.
  
 Ideation – spark many raw, fun ideas
 Choosing – help them quickly pick one
 Refining – add purpose, audience, key features
-Finalising – shape into a clear, exciting concept
+Finalising – shape into a clear, exciting concepts
 """
 
 SYSTEM_INSTRUCTIONS_SUMMARY_TO_TOPICS = """
@@ -101,7 +103,15 @@ Output JSON with keys: themes:[{name, rationale, representative_quotes[]}]. Keep
 """
 
 SYSTEM_INSTRUCTIONS_GROUPING = """
-You are forming 3-person groups for a creative co-creation sprint. Goals:
+You are forming groups for a creative co-creation sprint with STRICT RULES:
+
+GROUPING RULES (MUST FOLLOW):
+1. MINIMUM 3 people per group (NEVER 2 or fewer)
+2. MAXIMUM 4 people per group (NEVER 5 or more) 
+3. If leftover people would create a 2-person group, redistribute them into existing 3-person groups to make 4-person groups
+4. Better to have fewer, larger groups than many small groups
+
+Group formation goals:
 1. Topical alignment: similar creative interests/domains
 2. Skill complementarity: mix of AI experience levels and creative backgrounds
 3. Learning synergy: where participants can help each other
@@ -117,7 +127,9 @@ Form balanced groups where members can:
 - Share different perspectives and skills
 - Support each other's learning needs
 
-Return JSON: {"groups":[{"name":"Group 1", "participants":["name1","name2","name3"], "rationale":"Brief explanation of why this combination works"}]}
+IMPORTANT: Count participants carefully and ensure EVERY group has 3-4 members.
+
+Return JSON: {"groups":[{"name":"Group 1 - Descriptive Name", "participants":["name1","name2","name3"], "rationale":"Brief explanation of why this combination works"}]}
 """
 
 # --- Flask setup
@@ -683,6 +695,23 @@ FACILITATOR_HTML = """
       <button onclick="topics()" style="margin-bottom:20px;">✨ Generate Themes with AI</button>
       <pre id="themes" style="background:rgba(0,0,0,0.2); padding:16px; border-radius:12px; color:#e2e8f0; font-size:14px; line-height:1.6; border:1px solid rgba(255,255,255,0.1);"></pre>
     </div>
+
+    <div class="card" style="margin-top:24px;">
+      <h3 style="margin-top:0; color:#93c5fd; font-size:20px; margin-bottom:24px;">📊 Research Data Export</h3>
+      <p style="color:#94a3b8; margin-bottom:24px; font-size:14px;">Download workshop data for research analysis</p>
+      
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px;">
+        <button onclick="exportParticipants()" style="background:#7c3aed;">👥 Participant Profiles</button>
+        <button onclick="exportChats()" style="background:#dc2626;">💬 Individual Chats</button>
+      </div>
+      
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px;">
+        <button onclick="exportGroupChats()" style="background:#ea580c;">🗨️ Group Conversations</button>
+        <button onclick="exportAllData()" style="background:#059669;">📋 Complete Dataset</button>
+      </div>
+      
+      <div id="export-status" style="color:#94a3b8; font-size:14px; margin-top:16px; min-height:24px;"></div>
+    </div>
   </div>
 <script>
 async function refresh() {
@@ -863,6 +892,96 @@ setInterval(() => {
 }, 5000);
 refresh();
 updateSessionStatus();
+
+// Research data export functions
+async function exportParticipants() {
+  showExportStatus('📊 Generating participant profiles...');
+  try {
+    const response = await fetch('/api/facilitator/export/participants');
+    if (response.ok) {
+      const blob = await response.blob();
+      downloadFile(blob, `participants_${getCurrentTimestamp()}.json`);
+      showExportStatus('✅ Participant profiles exported successfully');
+    } else {
+      showExportStatus('❌ Failed to export participant profiles');
+    }
+  } catch (error) {
+    console.error('Export error:', error);
+    showExportStatus('❌ Export failed');
+  }
+}
+
+async function exportChats() {
+  showExportStatus('💬 Generating individual chats...');
+  try {
+    const response = await fetch('/api/facilitator/export/chats');
+    if (response.ok) {
+      const blob = await response.blob();
+      downloadFile(blob, `individual_chats_${getCurrentTimestamp()}.json`);
+      showExportStatus('✅ Individual chats exported successfully');
+    } else {
+      showExportStatus('❌ Failed to export chats');
+    }
+  } catch (error) {
+    console.error('Export error:', error);
+    showExportStatus('❌ Export failed');
+  }
+}
+
+async function exportGroupChats() {
+  showExportStatus('🗨️ Generating group conversations...');
+  try {
+    const response = await fetch('/api/facilitator/export/group_chats');
+    if (response.ok) {
+      const blob = await response.blob();
+      downloadFile(blob, `group_chats_${getCurrentTimestamp()}.json`);
+      showExportStatus('✅ Group conversations exported successfully');
+    } else {
+      showExportStatus('❌ Failed to export group chats');
+    }
+  } catch (error) {
+    console.error('Export error:', error);
+    showExportStatus('❌ Export failed');
+  }
+}
+
+async function exportAllData() {
+  showExportStatus('📋 Generating complete dataset...');
+  try {
+    const response = await fetch('/api/facilitator/export/all');
+    if (response.ok) {
+      const blob = await response.blob();
+      downloadFile(blob, `workshop_complete_dataset_${getCurrentTimestamp()}.json`);
+      showExportStatus('✅ Complete dataset exported successfully');
+    } else {
+      showExportStatus('❌ Failed to export complete dataset');
+    }
+  } catch (error) {
+    console.error('Export error:', error);
+    showExportStatus('❌ Export failed');
+  }
+}
+
+function showExportStatus(message) {
+  const statusEl = document.getElementById('export-status');
+  statusEl.textContent = message;
+  setTimeout(() => statusEl.textContent = '', 5000);
+}
+
+function getCurrentTimestamp() {
+  return new Date().toISOString().slice(0, 19).replace(/[T:]/g, '_');
+}
+
+function downloadFile(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
 </script>
 """
 
@@ -922,7 +1041,10 @@ async function refreshGroups() {
       
       groupDiv.innerHTML = `
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom:12px;">
-          <h4 style="color:#93c5fd; margin:0; font-size:18px;">Group ${group.number}</h4>
+          <div>
+            <h4 style="color:#93c5fd; margin:0; font-size:18px;">Group ${group.number}</h4>
+            <div style="color:#64748b; font-size:14px; margin-top:2px;">${group.name || 'Creative Group'}</div>
+          </div>
           <span style="background:rgba(59,130,246,0.2); color:#93c5fd; padding:4px 12px; border-radius:12px; font-size:12px;">${group.members.length} members</span>
         </div>
         <div style="margin-bottom:12px;">
@@ -979,21 +1101,35 @@ refreshGroups();
 
 GROUP_HTML = """
 <!doctype html>
-<title>Group Co-creation – {{ gname }}</title>
-{{ base_css|safe }}
-<header>
-  <h1>Group: {{ gname }}</h1>
-  <div class="small">One person acts as scribe. Keep answers short. Aim to finish in 30 minutes.</div>
-</header>
-<div class="card">
-  <div id="log"></div>
-  <form id="f" onsubmit="send(event)">
-    <div style="display:flex;gap:8px">
-      <input id="msg" placeholder="Type your reply…" style="flex:1" autocomplete="off" />
-      <button>Send</button>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Group Co-creation – {{ gname }}</title>
+  {{ base_css|safe }}
+</head>
+<body>
+  <div class="container">
+    <header>
+      <img src="/static/logo.png" alt="LuovAin!" style="max-width: 300px; height: auto; margin-bottom: 16px;">
+      <div class="subtitle">Group Co-creation • {{ gname }}</div>
+      <div class="participant-id">
+        <span class="status-indicator"></span>
+        One person acts as scribe. Keep answers short. Aim to finish in 30 minutes.
+      </div>
+    </header>
+    
+    <div class="card">
+      <div id="log" class="chat-container"></div>
+      <form id="f" onsubmit="send(event)">
+        <div class="input-container">
+          <input type="text" id="msg" placeholder="What would you like to create together?" autocomplete="off" />
+          <button type="submit">Send</button>
+        </div>
+      </form>
     </div>
-  </form>
-</div>
+  </div>
+</body>
 <script>
 const log = document.getElementById('log');
 const gname = '{{ gname }}';
@@ -1005,18 +1141,46 @@ function add(role, text){
 }
 function escapeHtml(unsafe) {return unsafe
   .replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;');}
+let lastMessageCount = 0;
+
 async function boot(){
   const r = await fetch('/api/group/boot/'+encodeURIComponent(gname));
   const j = await r.json();
   j.messages.forEach(m=> add(m.role,m.content));
+  lastMessageCount = j.messages.length;
+  startAutoRefresh();
 }
+
+async function refreshMessages(){
+  try {
+    const r = await fetch('/api/group/boot/'+encodeURIComponent(gname));
+    const j = await r.json();
+    
+    // Only add new messages to avoid duplicates
+    if (j.messages.length > lastMessageCount) {
+      const newMessages = j.messages.slice(lastMessageCount);
+      newMessages.forEach(m=> add(m.role,m.content));
+      lastMessageCount = j.messages.length;
+    }
+  } catch (error) {
+    console.error('Auto-refresh failed:', error);
+  }
+}
+
+function startAutoRefresh(){
+  // Refresh every 3 seconds to show new messages from other users
+  setInterval(refreshMessages, 3000);
+}
+
 async function send(e){
   e.preventDefault();
   const v = document.getElementById('msg').value.trim(); if(!v) return;
   add('user', v); document.getElementById('msg').value='';
+  lastMessageCount++; // Account for the user message we just added
   const r = await fetch('/api/group/chat/'+encodeURIComponent(gname),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:v})});
   const j = await r.json();
   add('assistant', j.reply);
+  lastMessageCount++; // Account for the assistant response
 }
 boot();
 </script>
@@ -1314,6 +1478,238 @@ def facilitator_themes():
         data = {"themes": []}
     return jsonify(data)
 
+# --- Research Data Export APIs
+
+@app.get("/api/facilitator/export/participants")
+def export_participants():
+    db = SessionLocal()
+    try:
+        # Get all participants with their profiles and chats
+        query = db.query(Participant)
+        if CURRENT_SESSION_ID:
+            query = query.filter(Participant.session_id == CURRENT_SESSION_ID)
+        
+        participants = query.all()
+        data = []
+        
+        for p in participants:
+            # Get profile if exists
+            profile = db.query(ParticipantProfile).filter_by(participant_id=p.id).first()
+            
+            participant_data = {
+                "uuid": p.uuid,
+                "name": p.name or "Anonymous",
+                "creative_role": p.creative_role or "Not specified",
+                "session_id": p.session_id,
+                "created_at": p.created_at.isoformat() if p.created_at else None,
+                "profile": {
+                    "summary": profile.summary if profile else None,
+                    "created_at": profile.created_at.isoformat() if profile and profile.created_at else None
+                }
+            }
+            data.append(participant_data)
+        
+        db.close()
+        
+        response_data = {
+            "export_type": "participants",
+            "session_id": CURRENT_SESSION_ID,
+            "export_timestamp": datetime.now().isoformat(),
+            "count": len(data),
+            "data": data
+        }
+        
+        response = make_response(json.dumps(response_data, indent=2))
+        response.headers['Content-Type'] = 'application/json'
+        response.headers['Content-Disposition'] = 'attachment; filename=participants.json'
+        return response
+        
+    except Exception as e:
+        db.close()
+        return jsonify({"error": str(e)}), 500
+
+@app.get("/api/facilitator/export/chats")
+def export_chats():
+    db = SessionLocal()
+    try:
+        # Get all individual chats from current session
+        query = db.query(Chat).join(Participant, Chat.participant_id == Participant.id)
+        if CURRENT_SESSION_ID:
+            query = query.filter(Participant.session_id == CURRENT_SESSION_ID)
+        
+        chats = query.order_by(Chat.created_at).all()
+        data = []
+        
+        for chat in chats:
+            chat_data = {
+                "participant_uuid": chat.participant.uuid,
+                "participant_name": chat.participant.name or "Anonymous",
+                "role": chat.role,  # user/assistant
+                "content": chat.content,
+                "stage": chat.stage,
+                "created_at": chat.created_at.isoformat() if chat.created_at else None
+            }
+            data.append(chat_data)
+        
+        db.close()
+        
+        response_data = {
+            "export_type": "individual_chats",
+            "session_id": CURRENT_SESSION_ID,
+            "export_timestamp": datetime.now().isoformat(),
+            "count": len(data),
+            "data": data
+        }
+        
+        response = make_response(json.dumps(response_data, indent=2))
+        response.headers['Content-Type'] = 'application/json'
+        response.headers['Content-Disposition'] = 'attachment; filename=individual_chats.json'
+        return response
+        
+    except Exception as e:
+        db.close()
+        return jsonify({"error": str(e)}), 500
+
+@app.get("/api/facilitator/export/group_chats")
+def export_group_chats():
+    db = SessionLocal()
+    try:
+        # Get all group chats
+        group_chats = db.query(GroupChat).join(Group, GroupChat.group_id == Group.id)\
+            .order_by(Group.name, GroupChat.created_at).all()
+        
+        data = []
+        for chat in group_chats:
+            chat_data = {
+                "group_name": chat.group.name,
+                "group_rationale": chat.group.rationale,
+                "role": chat.role,  # user/assistant
+                "content": chat.content,
+                "created_at": chat.created_at.isoformat() if chat.created_at else None
+            }
+            data.append(chat_data)
+        
+        db.close()
+        
+        response_data = {
+            "export_type": "group_chats",
+            "session_id": CURRENT_SESSION_ID,
+            "export_timestamp": datetime.now().isoformat(),
+            "count": len(data),
+            "data": data
+        }
+        
+        response = make_response(json.dumps(response_data, indent=2))
+        response.headers['Content-Type'] = 'application/json'
+        response.headers['Content-Disposition'] = 'attachment; filename=group_chats.json'
+        return response
+        
+    except Exception as e:
+        db.close()
+        return jsonify({"error": str(e)}), 500
+
+@app.get("/api/facilitator/export/all")
+def export_all_data():
+    db = SessionLocal()
+    try:
+        # Get participants
+        query = db.query(Participant)
+        if CURRENT_SESSION_ID:
+            query = query.filter(Participant.session_id == CURRENT_SESSION_ID)
+        participants = query.all()
+        
+        # Get individual chats
+        chat_query = db.query(Chat).join(Participant, Chat.participant_id == Participant.id)
+        if CURRENT_SESSION_ID:
+            chat_query = chat_query.filter(Participant.session_id == CURRENT_SESSION_ID)
+        chats = chat_query.order_by(Chat.created_at).all()
+        
+        # Get group chats
+        group_chats = db.query(GroupChat).join(Group, GroupChat.group_id == Group.id)\
+            .order_by(Group.name, GroupChat.created_at).all()
+        
+        # Get groups
+        groups = db.query(Group).all()
+        
+        # Build comprehensive dataset
+        participants_data = []
+        for p in participants:
+            profile = db.query(ParticipantProfile).filter_by(participant_id=p.id).first()
+            participants_data.append({
+                "uuid": p.uuid,
+                "name": p.name or "Anonymous",
+                "creative_role": p.creative_role or "Not specified",
+                "session_id": p.session_id,
+                "created_at": p.created_at.isoformat() if p.created_at else None,
+                "profile": {
+                    "summary": profile.summary if profile else None,
+                    "created_at": profile.created_at.isoformat() if profile and profile.created_at else None
+                }
+            })
+        
+        chats_data = []
+        for chat in chats:
+            chats_data.append({
+                "participant_uuid": chat.participant.uuid,
+                "participant_name": chat.participant.name or "Anonymous",
+                "role": chat.role,
+                "content": chat.content,
+                "stage": chat.stage,
+                "created_at": chat.created_at.isoformat() if chat.created_at else None
+            })
+        
+        group_chats_data = []
+        for chat in group_chats:
+            group_chats_data.append({
+                "group_name": chat.group.name,
+                "group_rationale": chat.group.rationale,
+                "role": chat.role,
+                "content": chat.content,
+                "created_at": chat.created_at.isoformat() if chat.created_at else None
+            })
+        
+        groups_data = []
+        for group in groups:
+            members = db.query(GroupMember).filter_by(group_id=group.id).all()
+            member_names = []
+            for member in members:
+                participant = db.query(Participant).filter_by(id=member.participant_id).first()
+                if participant:
+                    member_names.append(participant.name or "Anonymous")
+            
+            groups_data.append({
+                "name": group.name,
+                "rationale": group.rationale,
+                "members": member_names
+            })
+        
+        db.close()
+        
+        response_data = {
+            "export_type": "complete_dataset",
+            "session_id": CURRENT_SESSION_ID,
+            "export_timestamp": datetime.now().isoformat(),
+            "summary": {
+                "participants_count": len(participants_data),
+                "individual_chats_count": len(chats_data),
+                "group_chats_count": len(group_chats_data),
+                "groups_count": len(groups_data)
+            },
+            "participants": participants_data,
+            "individual_chats": chats_data,
+            "group_chats": group_chats_data,
+            "groups": groups_data
+        }
+        
+        response = make_response(json.dumps(response_data, indent=2))
+        response.headers['Content-Type'] = 'application/json'
+        response.headers['Content-Disposition'] = 'attachment; filename=complete_dataset.json'
+        return response
+        
+    except Exception as e:
+        db.close()
+        return jsonify({"error": str(e)}), 500
+
 # --- Grouping logic: GPT-5 based intelligent grouping
 
 @app.post("/api/facilitator/form_groups")
@@ -1346,7 +1742,7 @@ def form_groups():
             print(f"  - {p['name']} ({p['role']})")
             
         if len(people) < 3:
-            print(f"Not enough participants for grouping (need 3, have {len(people)})")
+            print(f"Not enough participants for grouping (need minimum 3, have {len(people)})")
             db.close(); return jsonify({"groups": []})
 
         # Prepare participant profiles for GPT-5
@@ -1379,15 +1775,39 @@ def form_groups():
         except Exception as e:
             print(f"GPT-5 grouping failed: {e}")
             print(f"Raw response was: {reply if 'reply' in locals() else 'No response received'}")
-            # Fallback: simple round-robin grouping
+            # Fallback: ensure minimum 3 people per group
             groups = []
-            for i in range(0, len(people), 3):
-                if i + 2 < len(people):
+            remaining_people = people[:]
+            group_num = 1
+            
+            while len(remaining_people) >= 3:
+                if len(remaining_people) == 5:
+                    # Split 5 people into one group of 3 and one group of 2 (but we'll add the 2 to existing group)
+                    group_size = 3
+                elif len(remaining_people) == 4:
+                    # Keep all 4 together
+                    group_size = 4
+                else:
+                    # Default to 3
+                    group_size = 3
+                
+                if len(remaining_people) >= group_size:
                     groups.append({
-                        "name": f"Group {len(groups)+1}",
-                        "participants": [people[j]["name"] for j in range(i, min(i+3, len(people)))],
-                        "rationale": "Simple grouping (AI analysis failed)"
+                        "name": f"Group {group_num} - Mixed Disciplines",
+                        "participants": [remaining_people[j]["name"] for j in range(group_size)],
+                        "rationale": "Simple grouping by availability (AI analysis failed)"
                     })
+                    remaining_people = remaining_people[group_size:]
+                    group_num += 1
+                else:
+                    break
+            
+            # Handle remaining 1-2 people by adding them to last group
+            if remaining_people and groups:
+                last_group = groups[-1]
+                for person in remaining_people:
+                    last_group["participants"].append(person["name"])
+                last_group["rationale"] += f" (expanded to include {len(remaining_people)} additional member{'s' if len(remaining_people) > 1 else ''})"
 
         # Persist groups
         # Clear old (in correct order due to foreign keys)
